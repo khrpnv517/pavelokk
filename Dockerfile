@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y \
 RUN ln -s /usr/bin/python3.11 /usr/local/bin/python && \
     ln -s /usr/bin/pip3 /usr/local/bin/pip
 
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
 # Обновляем pip
 RUN pip install --upgrade pip
 
@@ -21,13 +24,11 @@ RUN pip install --upgrade pip
 COPY requirements.txt .
 
 # Устанавливаем зависимости Python с поддержкой CUDA
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Копируем остальной код приложения
 COPY . .
-
-# Устанавливаем рабочую директорию
-WORKDIR /app
 
 # Указываем переменную окружения для корректного вывода логов
 ENV PYTHONUNBUFFERED=1
