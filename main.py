@@ -8,6 +8,7 @@ import time
 from fastapi import FastAPI, HTTPException
 from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
+import torch  # Добавлено
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -27,14 +28,12 @@ def download_file(url, save_path):
     else:
         raise Exception(f"Ошибка при скачивании файла: {response.status_code}")
 
-
 def convert_to_wav(mp3_path, wav_path, sample_rate=16000):
     """Конвертирует mp3 в WAV с частотой дискретизации 16 kHz."""
     audio = AudioSegment.from_file(mp3_path)
     audio = audio.set_frame_rate(sample_rate).set_channels(2)
     audio.export(wav_path, format="wav")
     print(f"Файл конвертирован в WAV: {wav_path}")
-
 
 def split_channels(wav_path, client_path, manager_path):
     """
@@ -46,7 +45,6 @@ def split_channels(wav_path, client_path, manager_path):
     # Правый канал (2) -> Менеджер
     subprocess.run(["sox", wav_path, manager_path, "remix", "2"], check=True)
     print(f"Каналы разделены:\n  Клиент: {client_path}\n  Менеджер: {manager_path}")
-
 
 def normalize_audio(input_path, output_path):
     """Нормализует аудио с помощью sox."""
@@ -62,12 +60,10 @@ def normalize_audio(input_path, output_path):
     except Exception as e:
         raise RuntimeError(f"Ошибка при нормализации аудио: {e}")
 
-
 def transcribe_with_timestamps(audio_path, model):
     """Распознаёт текст с тайм-кодами."""
     result = model.transcribe(audio_path, language="ru", task="transcribe")
     return result["segments"]
-
 
 def format_dialogue(segments_manager, segments_client):
     """Форматирует текст в виде ролевки с тайм-кодами, упорядочивая по времени."""
@@ -87,7 +83,6 @@ def format_dialogue(segments_manager, segments_client):
         dialogue_lines.append(f"[{start:.2f}-{end:.2f}] {role}: {text.strip()}")
 
     return "\n".join(dialogue_lines)
-
 
 def main(mp3_url):
     start_time = time.time()  # Начало измерения времени
@@ -117,7 +112,13 @@ def main(mp3_url):
         normalize_audio(manager_wav, right_normalized)
 
         # Шаг 4: Распознаём текст
-        model = whisper.load_model("large")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Используемое устройство: {device}")  # Для отладки
+        print(f"PyTorch использует CUDA: {torch.cuda.is_available()}")
+        print(f"Текущее устройство: {torch.cuda.current_device()}")
+        print(f"Имя устройства: {torch.cuda.get_device_name(device)}")
+
+        model = whisper.load_model("large", device=device)
 
         print("Распознавание текста для менеджера...")
         segments_manager = transcribe_with_timestamps(right_normalized, model)
@@ -143,7 +144,6 @@ def main(mp3_url):
 
     return dialogue, execution_time
 
-
 @app.post("/transcribe")
 async def transcribe(request: TranscriptionRequest):
     # Поскольку main - синхронная функция, используем run_in_threadpool для асинхронного вызова
@@ -155,7 +155,6 @@ async def transcribe(request: TranscriptionRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.get("/")
 def read_root():
